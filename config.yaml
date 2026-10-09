@@ -1,0 +1,71 @@
+mode: monitor              # monitor: alerts only | dry_run: also plans and quotes orders | live: trades
+                           # live also needs GIES_LIVE_TRADING=I_UNDERSTAND in .env
+poll_minutes: 15
+timezone: America/Chicago
+
+min_edge: 0.10             # after fee
+min_edge_low_confidence: 0.15
+take_profit_buffer: 0.08   # sell alert when a held side trades this far above fair
+alert_edge_change: 0.05    # re-alert when the edge moves this much...
+alert_repeat_hours: 6      # ...or this much time has passed
+stale_minutes: 120         # live inputs older than this make a model not data_ok
+stale_alert_hours: 2
+daily_summary_hour: 8
+dashboard_port: 8765       # http://127.0.0.1:8765 while `run` or `dashboard` is going
+
+trading:                   # used in dry_run and live; only markets with `trade: true` are touched
+  buy_buffer: 0.05           # buy only while the price stays this far under fair
+  max_order_gies: 100        # one order per market per cycle, at most this big
+  min_order_gies: 5
+  max_orders_per_cycle: 4
+  max_per_market_pct: 0.10   # cost basis in one market, as a share of account value
+  max_total_exposure_pct: 0.40
+  max_price_impact: 0.13     # the platform blocks at 0.15
+  daily_loss_limit_pct: 0.15 # halt trading if account value drops this much in 24 hours
+
+# market id -> short name for alerts, model (a file in gies_bot/models/) and params.
+# Delete a block to stop tracking a market. See .claude/skills/add-market-model.
+markets:
+  7:
+    name: Temp swing
+    trade: false             # fair value not yet trusted; see README
+    model: temperature_swing
+    params:
+      station: KCMI
+      iem_station: CMI
+      iem_network: IL_ASOS
+      lat: 40.0393
+      lon: -88.2781
+      start: 2026-10-07      # resolution criteria, not the title's Oct 5-26
+      end: 2026-10-28
+      threshold: 54
+      clim_years: [1990, 2025]
+  8:
+    name: Illinois vs Bears
+    trade: true
+    model: football_points
+    params:                  # YES if sum(sign * points) >= threshold
+      threshold: 1           # Illinois strictly greater than Bears
+      terms:
+        - {league: college-football, team: Illinois Fighting Illini, date: 2026-10-10, sign: 1}
+        - {league: nfl, team: Chicago Bears, date: 2026-10-11, sign: -1}
+  9:
+    name: Illinois 35+ points
+    trade: true
+    model: football_points
+    params:
+      threshold: 35
+      terms:
+        - {league: college-football, team: Illinois Fighting Illini, date: 2026-10-10, sign: 1}
+        - {league: college-football, team: Illinois Fighting Illini, date: 2026-10-24, sign: 1, fallback_implied: 21.0}
+  10:
+    name: Massmails 4+
+    trade: false             # rate rests on three years of data
+    model: massmail_count
+    params:
+      url: https://massmail.illinois.edu/massmailArchive
+      start: 2026-10-07
+      end: 2026-10-26
+      threshold: 4
+      rate_per_day: 0.12     # 2023-2025 same-window counts 3, 2, 2
+      dispersion: 2.0        # variance / mean

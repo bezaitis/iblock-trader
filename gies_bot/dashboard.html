@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="120">
+<title>GIES market monitor</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f5f4f1; --surface: #fcfcfb; --border: #e3e2dc; --grid: #e9e8e3;
+    --text: #0b0b0b; --text-2: #52514e; --text-3: #8a8983;
+    --price: #2a78d6; --model: #eb6834; --tint: #e8f0fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #111110; --surface: #1a1a19; --border: #30302d; --grid: #2a2a27;
+      --text: #ffffff; --text-2: #c3c2b7; --text-3: #8a8983;
+      --price: #3987e5; --model: #d95926; --tint: #1c2b40;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text);
+         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase;
+       letter-spacing: .04em; margin: 32px 0 10px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  .muted { color: var(--text-2); }
+  .faint { color: var(--text-3); }
+  .num { font-variant-numeric: tabular-nums; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+  .tile { padding: 12px 14px; }
+  .tile b { display: block; font-size: 22px; font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { font-size: 12px; font-weight: 600; color: var(--text-2); }
+  tr:last-child td { border-bottom: 0; }
+  td.r, th.r { text-align: right; }
+  td.wrap { white-space: normal; min-width: 180px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--tint); font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 12px; }
+  .card { padding: 14px 14px 10px; position: relative; }
+  .card h3 { margin: 0; font-size: 15px; }
+  .card .title { margin: 2px 0 8px; font-size: 12px; }
+  .card .notes { margin: 8px 0 4px; white-space: pre-line; font-size: 13px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-bottom: 2px; }
+  .legend i { display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 5px; }
+  .plot { position: relative; }
+  svg { display: block; width: 100%; overflow: visible; }
+  svg text { font-size: 11px; fill: var(--text-2); font-variant-numeric: tabular-nums; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+         border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.14);
+         white-space: nowrap; display: none; z-index: 2; }
+  .tip i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .alert { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .alert:last-child { border-bottom: 0; }
+  .alert .body { white-space: pre-line; margin-top: 2px; }
+  .empty { padding: 28px 14px; text-align: center; }
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 14px; margin-top: 16px; }
+  .controls .note { flex-basis: 100%; font-size: 13px; }
+  button { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+           padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+  button:hover { border-color: var(--text-3); }
+  button:focus-visible { outline: 2px solid var(--price); outline-offset: 2px; }
+  button[aria-pressed="true"], button[aria-checked="true"] { background: var(--tint); border-color: var(--price); font-weight: 600; }
+  .seg { display: inline-flex; }
+  .seg button { border-radius: 0; margin-left: -1px; }
+  .seg button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 8px 8px 0; }
+  .seg button[aria-pressed="true"] { position: relative; }
+  .switch { padding: 3px 10px; border-radius: 999px; min-width: 46px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>GIES market monitor</h1>
+    <span class="muted" id="updated"></span>
+  </header>
+  <div id="app"></div>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const TOKEN = "/*TOKEN*/";
+
+const cents = x => Math.round(x * 100) + "¢";
+const pct = x => Math.round(x * 100) + "%";
+const num = x => Math.round(x).toLocaleString();
+const signed = x => (x >= 0 ? "+" : "−") + Math.abs(Math.round(x)).toLocaleString();
+const when = iso => new Date(iso).toLocaleString([], {month: "short", day: "numeric", hour: "numeric", minute: "2-digit"});
+
+// All page text goes in through textContent: market titles and alert bodies are outside input.
+function el(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) k === "class" ? node.className = v : node.setAttribute(k, v);
+  for (const kid of kids.flat()) if (kid != null) node.append(kid);
+  return node;
+}
+function svg(tag, attrs) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+  return node;
+}
+
+async function control(request) {
+  const resp = await fetch("/control", {method: "POST", body: JSON.stringify(request),
+                                        headers: {"Content-Type": "application/json", "X-Control-Token": TOKEN}});
+  if (!resp.ok) alert("That didn't work: " + await resp.text());
+  location.reload();
+}
+function button(label, props, onClick) {
+  const node = el("button", {type: "button", ...props}, label);
+  node.addEventListener("click", onClick);
+  return node;
+}
+const MODE_NAMES = {monitor: "Alerts only", dry_run: "Dry run", live: "Live trading"};
+
+function controlPanel(c) {
+  const modes = el("div", {class: "seg", role: "group", "aria-label": "Mode"}, Object.keys(MODE_NAMES).map(mode =>
+    button(MODE_NAMES[mode], {"aria-pressed": String(c.mode === mode)}, () => {
+      if (mode === c.mode) return;
+      if (mode === "live" && !confirm("Switch to live trading? The bot will place real orders on markets with auto-trade on.")) return;
+      control({action: "mode", value: mode});
+    })));
+  const paused = c.stopped || c.halted;
+  const pause = paused ? button("Resume trading", null, () => control({action: "resume"}))
+                       : button("Pause trading", null, () => control({action: "stop"}));
+  const notes = [];
+  if (c.live_blocked) notes.push(`Live is selected but not armed, so the bot is running as a dry run. To arm it, add ${c.live_hint} to .env and restart the bot.`);
+  if (c.halted) notes.push(`Trading is halted: ${c.halted}.`);
+  else if (c.stopped) notes.push("Trading is paused. Monitoring and alerts continue.");
+  notes.push(`Changes take effect at the next check, within ${c.poll_minutes} minutes.`);
+  return el("div", {class: "panel controls"}, el("b", null, "Mode"), modes, pause,
+            notes.map(n => el("div", {class: "note muted"}, n)));
+}
+
+function verdict(row) {
+  if (!row.has_model) return el("span", {class: "muted"}, "needs a model");
+  if (!row.data_ok) return el("span", {class: "muted"}, "no fair value");
+  const text = `${row.side} ${signed(row.edge * 100)}`;
+  return row.actionable ? el("span", {class: "pill"}, text) : el("span", {class: "muted"}, "no edge");
+}
+
+function summaryTable(rows) {
+  const head = ["Market", "YES price", "Model", "Edge after fee", "Confidence", "Position", "P&L", "Auto-trade"];
+  const right = new Set([1, 2, 6]);
+  const body = rows.map(row => {
+    const hold = row.holdings.map(h => `${num(h.tokens)} ${h.outcome} at ${cents(h.cost)}`).join(", ") || "none";
+    const pnl = row.holdings.length ? signed(row.holdings.reduce((s, h) => s + (h.pnl || 0), 0)) : "";
+    const on = !!DATA.controls.trade[row.id];
+    const toggle = !row.has_model ? "" : button(on ? "On" : "Off",
+      {class: "switch", role: "switch", "aria-checked": String(on), "aria-label": `Auto-trade ${row.name}`},
+      () => control({action: "trade", market: row.id, value: !on}));
+    const cells = [row.name, cents(row.yes), row.data_ok ? pct(row.p_yes) : "n/a", verdict(row),
+                   row.data_ok ? row.confidence : "", hold, pnl, toggle];
+    return el("tr", null, cells.map((c, i) => el("td", {class: "num" + (right.has(i) ? " r" : "")}, c)));
+  });
+  return el("div", {class: "panel scroll"}, el("table", null,
+    el("thead", null, el("tr", null, head.map((h, i) => el("th", right.has(i) ? {class: "r"} : null, h)))),
+    el("tbody", null, body)));
+}
+
+function chart(host, points) {
+  host.replaceChildren();
+  const W = Math.max(host.clientWidth, 280), H = 190, m = {l: 34, r: 80, t: 8, b: 22};
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  let t0 = points[0].t, t1 = points[points.length - 1].t;
+  if (t1 - t0 < 36e5) { t0 -= 18e5; t1 += 18e5; }
+  const x = t => m.l + (t - t0) / (t1 - t0) * iw, y = v => m.t + (1 - v) * ih;
+  const root = svg("svg", {viewBox: `0 0 ${W} ${H}`, height: H, role: "img",
+                           "aria-label": "Market YES price and model fair value over time"});
+
+  for (const v of [0, .25, .5, .75, 1]) {
+    root.append(svg("line", {x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: "var(--grid)"}));
+    const label = svg("text", {x: m.l - 6, y: y(v) + 4, "text-anchor": "end"});
+    label.textContent = pct(v);
+    root.append(label);
+  }
+  const days = (t1 - t0) / 864e5;
+  for (let i = 0; i <= 3; i++) {
+    const t = t0 + (t1 - t0) * i / 3, d = new Date(t);
+    const label = svg("text", {x: x(t), y: H - 5, "text-anchor": i === 0 ? "start" : i === 3 ? "end" : "middle"});
+    label.textContent = days > 2 ? d.toLocaleDateString([], {month: "short", day: "numeric"})
+                                 : d.toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+    root.append(label);
+  }
+
+  const series = [["price", "var(--price)", "Price"], ["model", "var(--model)", "Model"]];
+  const ends = [];
+  for (const [key, color, name] of series) {
+    let d = "", pen = false, last = null;
+    for (const p of points) {
+      if (p[key] == null) { pen = false; continue; }
+      d += `${pen ? "L" : "M"}${x(p.t).toFixed(1)},${y(p[key]).toFixed(1)}`;
+      pen = true; last = p;
+    }
+    if (!last) continue;
+    root.append(svg("path", {d, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}));
+    root.append(svg("circle", {cx: x(last.t), cy: y(last[key]), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2}));
+    ends.push({name, value: last[key], py: y(last[key]), px: x(last.t), isPrice: key === "price"});
+  }
+  ends.sort((a, b) => a.py - b.py);
+  if (ends.length === 2 && ends[1].py - ends[0].py < 14) {
+    const mid = (ends[0].py + ends[1].py) / 2;
+    ends[0].py = mid - 7; ends[1].py = mid + 7;
+  }
+  for (const e of ends) {
+    const label = svg("text", {x: Math.min(e.px + 9, W - m.r + 9), y: e.py + 4, style: "fill: var(--text); font-weight: 600"});
+    label.textContent = `${e.name} ${e.isPrice ? cents(e.value) : pct(e.value)}`;
+    root.append(label);
+  }
+
+  const cross = svg("line", {y1: m.t, y2: m.t + ih, stroke: "var(--text-3)", "stroke-dasharray": "3 3", visibility: "hidden"});
+  const hit = svg("rect", {x: m.l, y: m.t, width: iw, height: ih, fill: "transparent"});
+  const tip = el("div", {class: "tip"});
+  root.append(cross, hit);
+  host.append(root, tip);
+  hit.addEventListener("mousemove", ev => {
+    const box = root.getBoundingClientRect();
+    const t = t0 + ((ev.clientX - box.left) / box.width * W - m.l) / iw * (t1 - t0);
+    const p = points.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+    const px = x(p.t) / W * box.width;
+    cross.setAttribute("x1", x(p.t)); cross.setAttribute("x2", x(p.t)); cross.setAttribute("visibility", "visible");
+    const dot = color => el("i", {style: `background:${color}`});
+    tip.replaceChildren(
+      el("div", {class: "muted"}, when(p.t)),
+      el("div", {class: "num"}, dot("var(--price)"), `Price ${cents(p.price)}`),
+      el("div", {class: "num"}, dot("var(--model)"), p.model == null ? "Model n/a" : `Model ${pct(p.model)}`));
+    tip.style.display = "block";
+    tip.style.top = "8px";
+    tip.style.left = px > box.width / 2 ? "" : px + 12 + "px";
+    tip.style.right = px > box.width / 2 ? box.width - px + 12 + "px" : "";
+  });
+  hit.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+}
+
+function card(row, history) {
+  const points = (history || []).map(([ts, price, model]) => ({t: +new Date(ts), price, model}));
+  const plot = el("div", {class: "plot"});
+  const node = el("div", {class: "panel card"},
+    el("h3", null, row.name),
+    el("div", {class: "title muted"}, row.title),
+    el("div", {class: "legend"},
+      el("span", null, el("i", {style: "background:var(--price)"}), "Market YES price"),
+      el("span", null, el("i", {style: "background:var(--model)"}), "Model fair value")),
+    plot,
+    el("div", {class: "notes"}, row.data_ok ? row.notes : `No fair value right now. ${row.notes}`));
+  if (points.length) draws.push(() => chart(plot, points));
+  else plot.append(el("div", {class: "empty faint"}, "No history yet"));
+  return node;
+}
+
+const draws = [];
+const app = document.getElementById("app");
+const state = DATA && DATA.state;
+if (!state) {
+  app.append(el("div", {class: "panel empty muted"}, "No data yet. Run one cycle: uv run python -m gies_bot once"));
+} else {
+  const ageMin = Math.round((Date.now() - new Date(state.at)) / 6e4);
+  document.getElementById("updated").textContent =
+    `Last check ${when(state.at)}` + (ageMin > DATA.controls.poll_minutes + 3
+      ? ` (${ageMin} minutes ago). The monitor is not running, so prices are stale and switches have no effect. Start it with: uv run python -m gies_bot run`
+      : "");
+  const modeled = state.rows.filter(r => r.has_model), unmapped = state.rows.filter(r => !r.has_model);
+  const tile = (label, value) => el("div", {class: "panel tile"}, el("span", {class: "muted"}, label), el("b", {class: "num"}, value));
+  app.append(el("div", {class: "tiles"},
+    tile("Account value", state.account_value == null ? "n/a" : num(state.account_value)),
+    tile("Cash", state.balance == null ? "n/a" : num(state.balance)),
+    tile("Running as", (DATA.controls.stopped || DATA.controls.halted) && DATA.controls.effective_mode !== "monitor"
+                       ? "Paused" : MODE_NAMES[DATA.controls.effective_mode]),
+    tile("Edges right now", String(state.rows.filter(r => r.actionable).length))));
+
+  app.append(controlPanel(DATA.controls));
+  app.append(el("h2", null, "Markets"), summaryTable(state.rows));
+
+  if (unmapped.length) {
+    app.append(el("h2", null, "Needs a model"), el("div", {class: "panel"}, unmapped.map(r =>
+      el("div", {class: "alert"}, el("b", null, r.title),
+        el("div", {class: "muted"}, `YES ${cents(r.yes)}. In Claude Code, say: add a model for market ${r.id}`)))));
+  }
+
+  if (state.mode && state.mode !== "monitor") {
+    const names = Object.fromEntries(state.rows.map(r => [r.id, r.name]));
+    const label = {filled: "Traded", dry_run: "Would trade", none: "No order", error: "Problem", halted: "Trading paused",
+                   refused: "Refused", unknown: "Unknown"};
+    const table = (head, rows) => el("div", {class: "panel scroll"}, el("table", null,
+      el("thead", null, el("tr", null, head.map(h => el("th", null, h)))),
+      el("tbody", null, rows.map(cells => el("tr", null, cells.map((c, i) =>
+        el("td", {class: i === cells.length - 1 ? "wrap muted" : "num"}, c)))))));
+    app.append(el("h2", null, "Trading decisions, last check"),
+      state.orders.length ? table(["Market", "Decision", "Detail"], state.orders.map(o =>
+        [o.market ? names[o.market] || `Market ${o.market}` : "All markets", label[o.status] || o.status,
+         [o.order, o.reason].filter(Boolean).join(": ")]))
+      : el("div", {class: "panel empty faint"}, "No markets have trade: true in config.yaml"));
+    if (DATA.orders.length) app.append(el("h2", null, "Order log"),
+      table(["When", "Market", "Result", "Order", "Note"], DATA.orders.map(o =>
+        [when(o.ts), names[o.market] || `Market ${o.market}`, (label[o.status] || o.status) + (o.mode === "live" ? "" : " (dry run)"),
+         `${o.side} ${num(o.amount)} ${o.unit === "gies" ? "GIES of" : "tokens of"} ${o.outcome.toUpperCase()}`, o.reason || ""])));
+  }
+
+  app.append(el("h2", null, "Price against model"),
+             el("div", {class: "cards"}, modeled.map(r => card(r, DATA.history[r.id]))));
+}
+
+if (DATA) {
+  app.append(el("h2", null, "Recent alerts"), el("div", {class: "panel"},
+    DATA.alerts.length ? DATA.alerts.map(a => el("div", {class: "alert"},
+      el("div", null, el("b", null, a.title), el("span", {class: "faint"}, `  ${when(a.ts)}${a.level === "quiet" ? " · quiet" : ""}`)),
+      el("div", {class: "body muted"}, a.body)))
+    : el("div", {class: "empty faint"}, "No alerts yet")));
+}
+
+const redraw = () => draws.forEach(draw => draw());
+redraw();
+let pending;
+addEventListener("resize", () => { clearTimeout(pending); pending = setTimeout(redraw, 120); });
+</script>
+</body>
+</html>
